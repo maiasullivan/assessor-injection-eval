@@ -1,0 +1,7 @@
+model,defence,n,parse_fails,MAE,QWK,exact,within_1,bias
+haiku,none,180,0,1.111,0.384,0.217,0.761,-0.789
+haiku,spotlight,180,0,1.1,0.406,0.233,0.756,-0.822
+qwen,none,60,0,0.867,0.482,0.383,0.767,0.3
+qwen,spotlight,60,0,1.017,0.397,0.283,0.7,0.317
+sonnet,none,120,0,0.858,0.559,0.342,0.833,-0.542
+sonnet,spotlight,120,0,0.925,0.536,0.3,0.808,-0.625
