@@ -7,6 +7,8 @@ Writes (all from the "Exploring Venus" prompt only):
   data/asap/essays.jsonl      main set: 60 essays stratified by human score
   data/asap/dev.jsonl         dev set: 20 more essays, the only ones prompt changes may be tuned on
   data/asap/probe_set.jsonl   Part B: 100 weak (1-2) + 100 strong (4-6), length-matched, disjoint from main set
+  data/asap/confirm.jsonl     Part B confirmation: 60 weak + 60 strong essays never used before
+                              (pre-registered in docs/partB_probe.md; drawn like the main set, seed 1)
 
 Only `essay_id`, the essay text and the human score are kept. Demographic columns are dropped.
 The score and id are stored for scoring/analysis only and must never be put in a model input.
@@ -29,6 +31,8 @@ MAIN_PER_SCORE = {1: 10, 2: 10, 3: 20, 4: 8, 5: 7, 6: 5}
 DEV_PER_SCORE = {1: 3, 2: 4, 3: 6, 4: 4, 5: 2, 6: 1}
 # probe set: length band where weak and strong essays overlap, and bin width for matching
 PROBE_BAND, PROBE_BIN, PROBE_PER_CLASS = (280, 480), 20, 100
+# confirmation set for Part B: weak and strong only, roughly in proportion to the prompt's score counts
+CONFIRM_PER_SCORE, CONFIRM_SEED = {1: 18, 2: 42, 4: 45, 5: 12, 6: 3}, 1
 
 
 def normalise(text: str) -> str:
@@ -48,13 +52,13 @@ def row(r) -> dict:
     return {"essay_id": r.essay_id, "text": r.text, "true_score": int(r.score), "tier": tier(r.score), "words": int(r.words)}
 
 
-def stratified(df: pd.DataFrame, per_score: dict[int, int]) -> pd.DataFrame:
+def stratified(df: pd.DataFrame, per_score: dict[int, int], seed: int = SEED) -> pd.DataFrame:
     parts = []
     for score, n in per_score.items():
         s = df[df.score == score]
         lo, hi = s.words.quantile([0.05, 0.95])
-        parts.append(s[s.words.between(lo, hi)].sample(n, random_state=SEED))
-    return pd.concat(parts).sample(frac=1, random_state=SEED)
+        parts.append(s[s.words.between(lo, hi)].sample(n, random_state=seed))
+    return pd.concat(parts).sample(frac=1, random_state=seed)
 
 
 def write_jsonl(path: Path, rows: list[dict]) -> None:
@@ -93,11 +97,18 @@ def main() -> None:
     probe = pd.concat(probe_parts).sample(frac=1, random_state=SEED)
     write_jsonl(OUT / "probe_set.jsonl", [row(r) for r in probe.itertuples()])
 
+    # Confirmation set: essays not in any earlier set, drawn like the main set (lengths not matched)
+    used |= set(probe.essay_id)
+    confirm = stratified(df[~df.essay_id.isin(used)], CONFIRM_PER_SCORE, seed=CONFIRM_SEED)
+    write_jsonl(OUT / "confirm.jsonl", [row(r) for r in confirm.itertuples()])
+
     print(f"dev: {len(dev)} essays, by score {dev.score.value_counts().sort_index().to_dict()}")
     print(f"main: {len(main)} essays, by score {main.score.value_counts().sort_index().to_dict()}")
     print(f"main words by tier: {main.groupby(main.score.map(tier)).words.median().to_dict()}")
     print(f"probe: {len(probe)} essays, by class {probe.cls.value_counts().to_dict()}, "
           f"median words {probe.groupby('cls').words.median().to_dict()}")
+    print(f"confirm: {len(confirm)} essays, by score {confirm.score.value_counts().sort_index().to_dict()}, "
+          f"median words {confirm.groupby(confirm.score.map(tier)).words.median().to_dict()}")
 
 
 if __name__ == "__main__":
