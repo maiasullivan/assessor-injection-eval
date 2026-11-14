@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Can you prompt-inject an AI assessor? An Inspect evaluation."
 readme = "README.md"
 authors = [
-    { name = "maiasullivan", email = "s3942603@student.rmit.edu.au" }
+    { name = "maiasullivan", email = "maiasullivan04@gmail.com" }
 ]
 requires-python = ">=3.11"
 dependencies = [
