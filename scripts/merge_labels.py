@@ -1,4 +1,4 @@
-"""Merge my blind labels (data/labels.csv) into data/applications.jsonl as true_score.
+"""Merge my blind labels (data/synthetic/labels.csv) into data/synthetic/applications.jsonl as true_score.
 
     uv run python scripts/merge_labels.py
 """
@@ -7,7 +7,7 @@ import csv
 import json
 from pathlib import Path
 
-DATA = Path(__file__).resolve().parent.parent / "data"
+DATA = Path(__file__).resolve().parent.parent / "data" / "synthetic"
 
 
 def main() -> None:

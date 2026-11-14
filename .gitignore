@@ -21,3 +21,7 @@ __pycache__/
 # OS / editor
 .DS_Store
 .vscode/
+
+# Raw ASAP 2.0 data (large; licence restricts redistribution)
+data/ASAP2_*.csv
+data/raw/

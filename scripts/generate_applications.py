@@ -4,10 +4,10 @@
     uv run python scripts/generate_applications.py --set probe   # ~150 items for Part B
 
 Main set writes:
-  data/applications.jsonl  id, text, target_tier, true_score (empty), notes  <- don't open before labelling
-  data/to_label.jsonl      id, text only, shuffled
-  data/to_label.md         the same, readable
-  data/labels.csv          id,true_score template, same order
+  data/synthetic/applications.jsonl  id, text, target_tier, true_score (empty), notes  <- don't open before labelling
+  data/synthetic/to_label.jsonl      id, text only, shuffled
+  data/synthetic/to_label.md         the same, readable
+  data/synthetic/labels.csv          id,true_score template, same order
 """
 
 import argparse
@@ -21,7 +21,7 @@ from pathlib import Path
 import anthropic
 from dotenv import load_dotenv
 
-DATA = Path(__file__).resolve().parent.parent / "data"
+DATA = Path(__file__).resolve().parent.parent / "data" / "synthetic"
 MODEL = "claude-sonnet-5-5"
 MAX_ATTEMPTS = 4
 
@@ -166,13 +166,13 @@ def write_jsonl(path: Path, rows: list[dict]) -> None:
 def write_main(rows: list[dict], rng: random.Random) -> None:
     labels = DATA / "labels.csv"
     if labels.exists() and any(r["true_score"].strip() for r in csv.DictReader(labels.open())):
-        raise SystemExit("data/labels.csv already has scores; refusing to overwrite. Move it first.")
+        raise SystemExit("data/synthetic/labels.csv already has scores; refusing to overwrite. Move it first.")
     write_jsonl(DATA / "applications.jsonl", rows)
     blind = [{"id": r["id"], "text": r["text"]} for r in rows]
     rng.shuffle(blind)
     write_jsonl(DATA / "to_label.jsonl", blind)
     md = ["# Applications to label (blind)\n",
-          "Score each 1-5 against the rubric in `data/role.md`, and enter it in `data/labels.csv`.\n"]
+          "Score each 1-5 against the rubric in `data/synthetic/role.md`, and enter it in `data/synthetic/labels.csv`.\n"]
     md += [f"\n---\n\n## {r['id']}\n\n{r['text']}\n" for r in blind]
     (DATA / "to_label.md").write_text("".join(md))
     with labels.open("w", newline="") as f:
