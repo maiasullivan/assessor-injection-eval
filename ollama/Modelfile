@@ -1,0 +1,7 @@
+# Local assessor model. Built with:
+#   ollama create qwen3-4b-assessor -f ollama/Modelfile
+# Inspect talks to Ollama over its OpenAI-compatible API, which can't set
+# num_ctx, so the context window is fixed here instead (default is 4096).
+# Qwen3-4B-Instruct-2507 is non-thinking only, so no <think> blocks.
+FROM qwen3:4b-instruct-2507-q4_K_M
+PARAMETER num_ctx 8192
