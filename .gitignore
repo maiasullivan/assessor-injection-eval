@@ -26,3 +26,6 @@ __pycache__/
 # Raw ASAP 2.0 data (large; licence restricts redistribution)
 data/ASAP2_*.csv
 data/raw/
+
+# Djinni CV texts (real, anonymised people): rebuilt locally, never committed
+data/cv/candidates*.jsonl
