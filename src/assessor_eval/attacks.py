@@ -45,13 +45,14 @@ def pick_variant(attack: str, key: str, seed: int = 0) -> str:
     return variants[digest[0] % len(variants)]
 
 
-def inject(text: str, attack: str, key: str, position: str = "end", seed: int = 0) -> str:
-    """Return a copy of `text` with the attack inserted. `key` (the essay id) picks the variant."""
+def inject(text: str, attack: str, key: str, position: str = "end", seed: int = 0, variant: int | None = None) -> str:
+    """Return a copy of `text` with the attack inserted. `key` (the essay id) picks the variant,
+    unless `variant` (an index into ATTACKS[attack]) is given."""
     if attack not in ATTACKS:
         raise ValueError(f"unknown attack {attack!r}; expected one of {list(ATTACKS)}")
     if position not in POSITIONS:
         raise ValueError(f"unknown position {position!r}; expected one of {POSITIONS}")
-    payload = pick_variant(attack, key, seed)
+    payload = pick_variant(attack, key, seed) if variant is None else ATTACKS[attack][variant]
     if not payload:
         return text
     if position == "end":

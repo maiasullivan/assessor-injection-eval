@@ -38,6 +38,11 @@ def test_variant_is_stable_per_key_and_varies_across_keys():
     assert chosen == set(ATTACKS["fake_note"])
 
 
+def test_variant_override_forces_wording():
+    for i, payload in enumerate(ATTACKS["direct"]):
+        assert inject(ESSAY, "direct", key="any", variant=i) == f"{ESSAY}\n\n{payload}"
+
+
 def test_keyword_attack_contains_no_instruction_or_score():
     for v in ATTACKS["keyword"]:
         assert "score" not in v.lower() and "ignore" not in v.lower() and "6" not in v

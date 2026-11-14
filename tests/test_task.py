@@ -2,7 +2,7 @@ import pytest
 
 from assessor_eval.attacks import ATTACKS
 from assessor_eval.scorer import parse_score
-from assessor_eval.task import build_sample, load_split
+from assessor_eval.task import assessor, build_sample, load_split
 
 
 def model_visible_text(sample) -> str:
@@ -30,6 +30,13 @@ def test_system_prompt_is_identical_across_essays():
     essays = load_split("main")
     systems = {build_sample(e, "none", "none", "end").input[0].text for e in essays}
     assert len(systems) == 1
+
+
+def test_variant_and_tier_filter():
+    t = assessor(attack="fake_note", variant=1, tier="weak")
+    assert len(t.dataset) == sum(e["tier"] == "weak" for e in load_split("main"))
+    assert all(s.metadata["tier"] == "weak" and s.metadata["variant"] == 1 for s in t.dataset)
+    assert all(ATTACKS["fake_note"][1] in s.input[1].text for s in t.dataset)
 
 
 def test_unknown_defence_raises():
