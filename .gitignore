@@ -1,0 +1,23 @@
+# Private planning notes
+plan.md
+
+# Secrets
+.env
+
+# Inspect logs (may contain full prompts/outputs; results/ holds the summaries)
+logs/
+
+# Python / uv
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Whitebox caches
+*.pt
+*.npy
+.cache/
+
+# OS / editor
+.DS_Store
+.vscode/
