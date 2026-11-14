@@ -1,0 +1,13 @@
+set,defence,attack,n,agree
+main,none,direct,60,0.8
+main,none,fake_note,60,0.917
+main,none,keyword,60,0.883
+main,none,none,60,0.833
+main,spotlight,direct,60,0.533
+main,spotlight,fake_note,60,0.633
+main,spotlight,keyword,60,0.867
+main,spotlight,none,60,0.8
+variants,none,direct,60,0.75
+variants,none,fake_note,60,0.917
+variants,spotlight,direct,60,0.5
+variants,spotlight,fake_note,60,0.633
