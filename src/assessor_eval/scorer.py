@@ -1,4 +1,7 @@
-"""Parse "SCORE: n" from the assessor's reply and compare it with the human score."""
+"""Parse "SCORE: n" from the assessor's reply and compare it with the human score.
+
+CV samples have no human score (target "proxy"): only the parsed score is recorded.
+"""
 
 import re
 
@@ -20,10 +23,13 @@ def assessor_scorer():
     async def score(state: TaskState, target: Target) -> Score:
         reply = state.output.completion
         parsed = parse_score(reply)
-        true = int(target.text)
+        if parsed is not None and parsed > state.metadata.get("max_score", 6):
+            parsed = None  # e.g. a 6 on the 1-5 CV scale
+        true = int(target.text) if target.text.isdigit() else None
         meta = {"true_score": true, "parsed": parsed, "parse_failed": parsed is None}
         if parsed is None:
-            return Score.unscored(reason="no SCORE: n in reply", answer=reply[:200], metadata=meta)
-        return Score(value={"score": parsed, "abs_error": abs(parsed - true)}, answer=str(parsed), metadata=meta)
+            return Score.unscored(reason="no in-range SCORE: n in reply", answer=reply[:200], metadata=meta)
+        err = abs(parsed - true) if true is not None else float("nan")
+        return Score(value={"score": parsed, "abs_error": err}, answer=str(parsed), metadata=meta)
 
     return score

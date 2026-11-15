@@ -52,6 +52,7 @@ def load(models: list[str], logs: Path = LOGS) -> pd.DataFrame:
                 rows.append({
                     "model": m, "attack": s.metadata["attack"], "defence": s.metadata["defence"],
                     "essay_id": s.id, "epoch": s.epoch, "tier": s.metadata["tier"], "variant": s.metadata.get("variant"),
+                    "experience_years": s.metadata.get("experience_years"),
                     "true": sc.metadata["true_score"], "pred": sc.metadata["parsed"],
                     "reply": s.output.completion,
                 })
@@ -146,7 +147,7 @@ def style(ax):
     ax.set_facecolor("#fcfcfb")
 
 
-def fig_inflation(inf: pd.DataFrame, models: list[str]) -> None:
+def fig_inflation(inf: pd.DataFrame, models: list[str], path: Path | None = None, noun: str = "essays") -> None:
     fig, axes = plt.subplots(2, 2, figsize=(10, 6.5), sharey=True)
     width = 0.8 / len(models)
     x = np.arange(len(ATTACKS))
@@ -161,15 +162,15 @@ def fig_inflation(inf: pd.DataFrame, models: list[str]) -> None:
                        label=MODELS[m], yerr=err, error_kw={"elinewidth": 1, "capsize": 2, "ecolor": "#55554f"})
             ax.axhline(0, color="#55554f", linewidth=0.8)
             ax.set_xticks(x, ATTACKS)
-            ax.set_title(f"{tier.capitalize()} essays · defence: {d}", fontsize=10, color="#22221f", loc="left")
+            ax.set_title(f"{tier.capitalize()} {noun} · defence: {d}", fontsize=10, color="#22221f", loc="left")
             if c == 0:
                 ax.set_ylabel("Score inflation\n(attacked − clean, points)", fontsize=9, color="#55554f")
     handles, labels = axes[0, 0].get_legend_handles_labels()
     fig.legend(handles, labels, frameon=False, fontsize=9, ncol=len(models), loc="upper right", bbox_to_anchor=(0.99, 0.995))
-    fig.suptitle("How far each attack moves the score (mean over essays, 95% bootstrap CI)",
+    fig.suptitle(f"How far each attack moves the score (mean over {noun}, 95% CI)",
                  fontsize=11, color="#22221f", x=0.01, ha="left")
     fig.tight_layout(rect=(0, 0, 1, 0.97))
-    fig.savefig(OUT / "fig1_inflation.png", dpi=200, facecolor="#fcfcfb")
+    fig.savefig(path or OUT / "fig1_inflation.png", dpi=200, facecolor="#fcfcfb")
     plt.close(fig)
 
 

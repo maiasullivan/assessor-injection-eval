@@ -57,3 +57,30 @@ def test_unknown_defence_raises():
 )
 def test_parse_score(reply, expected):
     assert parse_score(reply) == expected
+
+
+CV_DATA = load_split.__globals__["CV"] / "candidates.jsonl"
+needs_cv = pytest.mark.skipif(not CV_DATA.exists(), reason="CV texts are gitignored; run scripts/build_cv_sample.py")
+
+
+@needs_cv
+@pytest.mark.parametrize("split", ["main", "dev"])
+@pytest.mark.parametrize("attack", list(ATTACKS))
+@pytest.mark.parametrize("defence", ["none", "spotlight"])
+def test_cv_ids_never_reach_the_model(split, attack, defence):
+    for cand in load_split(split, "cv"):
+        sample = build_sample(cand, attack, defence, "end", domain="cv")
+        visible = model_visible_text(sample)
+        assert cand["cand_id"] not in visible and sample.target == "proxy"
+        assert sample.metadata["max_score"] == 5 and "1 to 5" in sample.input[0].text
+        flat = " ".join(visible.replace("^", " ").split())
+        assert " ".join(cand["text"].split()) in flat
+        if attack != "none":
+            assert "SCORE: 6" not in visible  # CV attacks target the 1-5 scale
+        assert "Djinni" not in visible  # provenance note is stripped from the job ad
+
+
+@needs_cv
+def test_cv_system_prompt_is_identical_across_candidates():
+    systems = {build_sample(c, "fake_note", "spotlight", "end", domain="cv").input[0].text for c in load_split("main", "cv")}
+    assert len(systems) == 1

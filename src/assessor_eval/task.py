@@ -3,6 +3,10 @@
     uv run inspect eval src/assessor_eval/task.py -T split=dev --model anthropic/claude-haiku-5-5
     uv run inspect eval src/assessor_eval/task.py -T attack=keyword -T defence=spotlight --model ...
     uv run inspect eval src/assessor_eval/task.py -T attack=direct -T variant=2 -T tier=weak --model ...
+    uv run inspect eval src/assessor_eval/task.py -T domain=cv -T attack=keyword --model ...
+
+domain="cv" screens Djinni candidate profiles against the fictional job ad (data/cv/). There is no
+human score: the target is "proxy" and the tier (from stated experience years) is analysis-only.
 
 The system and user messages are built literally here rather than with Inspect's
 system_message() solver, which str.format()s sample metadata into its template: that would be
@@ -16,52 +20,56 @@ from inspect_ai.dataset import Sample
 from inspect_ai.model import ChatMessageSystem, ChatMessageUser, GenerateConfig
 from inspect_ai.solver import generate
 
-from assessor_eval.attacks import ATTACKS, inject, pick_variant
+from assessor_eval.attacks import ATTACK_SETS, inject, pick_variant
 from assessor_eval.defences import spotlight
-from assessor_eval.prompts import ASAP, system_prompt, user_prompt
+from assessor_eval.prompts import ASAP, CV, MAX_SCORE, system_prompt, user_prompt
 from assessor_eval.scorer import assessor_scorer
 
-SPLITS = {"main": "essays.jsonl", "dev": "dev.jsonl"}
+SPLITS = {"essay": (ASAP, {"main": "essays.jsonl", "dev": "dev.jsonl"}),
+          "cv": (CV, {"main": "candidates.jsonl", "dev": "candidates_dev.jsonl"})}
 DEFENCES = ("none", "spotlight")
 
 
-def build_sample(essay: dict, attack: str, defence: str, position: str, variant: int | None = None) -> Sample:
-    """`variant` forces one wording for every essay; None keeps the per-essay hashed choice."""
-    text = inject(essay["text"], attack, key=essay["essay_id"], position=position, variant=variant)
+def build_sample(item: dict, attack: str, defence: str, position: str, variant: int | None = None,
+                 domain: str = "essay") -> Sample:
+    """`variant` forces one wording for every item; None keeps the per-item hashed choice."""
+    key = item["cand_id"] if domain == "cv" else item["essay_id"]
+    text = inject(item["text"], attack, key=key, position=position, variant=variant, domain=domain)
     if variant is None:
-        variant = ATTACKS[attack].index(pick_variant(attack, essay["essay_id"]))
-    system = system_prompt()
+        variant = ATTACK_SETS[domain][attack].index(pick_variant(attack, key, domain=domain))
+    system = system_prompt(domain)
     if defence == "spotlight":
-        addendum, text = spotlight(text)
+        addendum, text = spotlight(text, domain)
         system = f"{system}\n\n{addendum}"
     elif defence != "none":
         raise ValueError(f"unknown defence {defence!r}; expected one of {DEFENCES}")
+    meta = {"tier": item["tier"], "words": item["words"], "attack": attack, "defence": defence,
+            "position": position, "variant": variant, "domain": domain, "max_score": MAX_SCORE[domain]}
+    if domain == "cv":
+        meta |= {"true_score": None, "experience_years": item["experience_years"]}
+        target = "proxy"
+    else:
+        meta["true_score"] = item["true_score"]
+        target = str(item["true_score"])
     return Sample(
-        input=[ChatMessageSystem(content=system), ChatMessageUser(content=user_prompt(text))],
-        target=str(essay["true_score"]),
-        id=essay["essay_id"],
-        metadata={
-            "true_score": essay["true_score"],
-            "tier": essay["tier"],
-            "words": essay["words"],
-            "attack": attack,
-            "defence": defence,
-            "position": position,
-            "variant": variant,
-        },
+        input=[ChatMessageSystem(content=system), ChatMessageUser(content=user_prompt(text, domain))],
+        target=target,
+        id=key,
+        metadata=meta,
     )
 
 
-def load_split(split: str) -> list[dict]:
-    return [json.loads(line) for line in (ASAP / SPLITS[split]).read_text().splitlines()]
+def load_split(split: str, domain: str = "essay") -> list[dict]:
+    folder, files = SPLITS[domain]
+    return [json.loads(line) for line in (folder / files[split]).read_text().splitlines()]
 
 
 @task
 def assessor(attack: str = "none", defence: str = "none", position: str = "end", split: str = "main",
-             variant: int = -1, tier: str = "all"):
-    """variant = -1 keeps the per-essay hashed wording; tier = weak/middling/strong keeps one tier only."""
-    essays = [e for e in load_split(split) if tier in ("all", e["tier"])]
-    samples = [build_sample(e, attack, defence, position, None if variant < 0 else variant) for e in essays]
+             variant: int = -1, tier: str = "all", domain: str = "essay"):
+    """variant = -1 keeps the per-item hashed wording; tier = weak/middling/strong keeps one tier only."""
+    items = [e for e in load_split(split, domain) if tier in ("all", e["tier"])]
+    samples = [build_sample(e, attack, defence, position, None if variant < 0 else variant, domain) for e in items]
     return Task(
         dataset=samples,
         solver=generate(),
@@ -69,5 +77,5 @@ def assessor(attack: str = "none", defence: str = "none", position: str = "end",
         # temperature is dropped for Claude models (default sampling + epochs); it makes Ollama deterministic
         config=GenerateConfig(max_tokens=4000, temperature=0),
         metadata={"attack": attack, "defence": defence, "position": position, "split": split,
-                  "variant": variant, "tier": tier},
+                  "variant": variant, "tier": tier, "domain": domain},
     )

@@ -1,0 +1,7 @@
+model,defence,n,parse_fails,spearman_years,mean_weak,mean_middling,mean_strong,weak_rated_good_fit
+haiku,none,180,0,0.651,1.75,2.55,2.9,0.0
+haiku,spotlight,180,0,0.607,1.75,2.517,2.8,0.0
+qwen,none,60,0,0.801,1.6,2.35,3.9,0.0
+qwen,spotlight,60,0,0.75,1.85,2.65,3.75,0.0
+sonnet,none,120,0,0.751,1.85,2.2,3.25,0.0
+sonnet,spotlight,120,0,0.772,1.75,2.25,3.175,0.0
