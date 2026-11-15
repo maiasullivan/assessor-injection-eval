@@ -196,3 +196,36 @@ Two consequences:
 2. **Causal test (activation patching):** copy the middle-layer state from the clean run of an essay into its attacked run and see whether the written score returns to the clean score. That would test whether the model *uses* this information.
 3. **Finer labels:** a probe for the full 1–6 score (or human score regression), including middling essays.
 4. **More models**, including a larger open model on a cloud GPU, and the quantised build actually deployed.
+
+---
+
+## 9. Length-matched confirmation (pre-registered)
+
+*Written and committed to git before the length-matched essays were run through the model.*
+
+**Why:** in the first confirmation set (§5–6), word count alone separated weak from strong essays almost perfectly (0.999). So we couldn't tell whether the mid-layer probe tracks essay quality or just essay length. Here, length is removed as a cue by design.
+
+### 9.1 Data
+`data/asap/confirm_lm.jsonl`: 120 "Exploring Venus" essays, never used in any earlier step.
+- **Weak:** 60 essays (human score 1: 19, score 2: 41).
+- **Strong:** 60 essays (score 4: 58, score 5: 2).
+- **Length matching:** essays are matched in 20-word bins within 250–500 words, using the same procedure as the probe training set (seed 2). Median length is 382 words for weak essays and 383 for strong.
+- **A narrower contrast than before:** almost all strong essays are 4s, because essays that are both strong and short are rare. So this set compares "fail" (1–2) with "adequate pass" (4), a harder distinction than §5's.
+
+### 9.2 Everything else is unchanged from §4
+Same conditions (clean, `direct`, `fake_note`, no defence, hashed wording), model, prompt, mid probe (layers 15–17), layer-1 probe, surface features and statistics.
+
+### 9.3 Hypotheses and decision rules
+- **Check:** the word-count AUROC should be close to 0.5. If it's above 0.65, the matching failed, and we report that.
+- **Precondition:** output AUROC under `fake_note` is below 0.80 (same as §4).
+- **L-H1 (primary):** under `fake_note`, mid probe AUROC − output AUROC > 0. *Confirmed* if the 95% CI excludes zero.
+- **L-H2 (secondary):** the same under `direct`.
+- **L-H3 (secondary):** under `fake_note`, mid probe − layer-1 probe > 0.
+- **L-H4 (secondary):** under `fake_note`, adding the mid-probe log-odds to the surface features (fitted on this set, cross-validated) raises AUROC, with the CI excluding zero. Length can't do the work here, so this test now has room to show something.
+
+**How to read the outcome (stated in advance):**
+- If L-H1 holds, the surviving signal isn't just essay length.
+- If the mid probe falls to near chance here (say below 0.6, even clean), the §5 result was largely carried by length, and we'll say so.
+- If the mid probe is fine clean but L-H1 fails, the signal exists but doesn't survive the attack once length is removed.
+
+**Prediction:** we expect the mid probe to still work clean, because it was trained on length-matched essays just like these. We're genuinely unsure about L-H1 and L-H4.

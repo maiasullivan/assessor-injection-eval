@@ -9,6 +9,8 @@ Writes (all from the "Exploring Venus" prompt only):
   data/asap/probe_set.jsonl   Part B: 100 weak (1-2) + 100 strong (4-6), length-matched, disjoint from main set
   data/asap/confirm.jsonl     Part B confirmation: 60 weak + 60 strong essays never used before
                               (pre-registered in docs/partB_probe.md; drawn like the main set, seed 1)
+  data/asap/confirm_lm.jsonl  Part B length-matched confirmation: 60 weak + 60 strong, never used before,
+                              matched in 20-word bins within 250-500 words (pre-registered, §9)
 
 Only `essay_id`, the essay text and the human score are kept. Demographic columns are dropped.
 The score and id are stored for scoring/analysis only and must never be put in a model input.
@@ -33,6 +35,7 @@ DEV_PER_SCORE = {1: 3, 2: 4, 3: 6, 4: 4, 5: 2, 6: 1}
 PROBE_BAND, PROBE_BIN, PROBE_PER_CLASS = (280, 480), 20, 100
 # confirmation set for Part B: weak and strong only, roughly in proportion to the prompt's score counts
 CONFIRM_PER_SCORE, CONFIRM_SEED = {1: 18, 2: 42, 4: 45, 5: 12, 6: 3}, 1
+CONFIRM_LM_BAND, CONFIRM_LM_PER_CLASS, CONFIRM_LM_SEED = (250, 500), 60, 2
 
 
 def normalise(text: str) -> str:
@@ -61,6 +64,21 @@ def stratified(df: pd.DataFrame, per_score: dict[int, int], seed: int = SEED) ->
     return pd.concat(parts).sample(frac=1, random_state=seed)
 
 
+def length_matched(df: pd.DataFrame, band: tuple[int, int], per_class: int, seed: int) -> pd.DataFrame:
+    """Equal numbers of weak and strong essays per 20-word length bin, so length can't separate them."""
+    rest = df[df.words.between(*band) & (df.score != 3)].copy()
+    rest["bin"] = rest.words // PROBE_BIN
+    rest["cls"] = (rest.score >= 4).map({True: "strong", False: "weak"})
+    counts = rest.groupby(["bin", "cls"]).size().unstack(fill_value=0)
+    per_bin = counts.min(axis=1)
+    # scale bin quotas down to per_class in total
+    quota = (per_bin * per_class / per_bin.sum()).round().astype(int)
+    quota.iloc[quota.argmax()] += per_class - quota.sum()
+    parts = [rest[(rest.bin == b) & (rest.cls == c)].sample(q, random_state=seed)
+             for b, q in quota.items() if q for c in ("weak", "strong")]
+    return pd.concat(parts).sample(frac=1, random_state=seed)
+
+
 def write_jsonl(path: Path, rows: list[dict]) -> None:
     path.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows))
 
@@ -84,17 +102,7 @@ def main() -> None:
 
     # Probe set: equal numbers of weak and strong essays per length bin, so length can't separate them.
     used = set(main.essay_id) | set(dev.essay_id)
-    rest = df[~df.essay_id.isin(used) & df.words.between(*PROBE_BAND) & (df.score != 3)].copy()
-    rest["bin"] = rest.words // PROBE_BIN
-    rest["cls"] = (rest.score >= 4).map({True: "strong", False: "weak"})
-    counts = rest.groupby(["bin", "cls"]).size().unstack(fill_value=0)
-    per_bin = counts.min(axis=1)
-    # scale bin quotas down to PROBE_PER_CLASS in total
-    quota = (per_bin * PROBE_PER_CLASS / per_bin.sum()).round().astype(int)
-    quota.iloc[quota.argmax()] += PROBE_PER_CLASS - quota.sum()
-    probe_parts = [rest[(rest.bin == b) & (rest.cls == c)].sample(q, random_state=SEED)
-                   for b, q in quota.items() if q for c in ("weak", "strong")]
-    probe = pd.concat(probe_parts).sample(frac=1, random_state=SEED)
+    probe = length_matched(df[~df.essay_id.isin(used)], PROBE_BAND, PROBE_PER_CLASS, SEED)
     write_jsonl(OUT / "probe_set.jsonl", [row(r) for r in probe.itertuples()])
 
     # Confirmation set: essays not in any earlier set, drawn like the main set (lengths not matched)
@@ -102,11 +110,18 @@ def main() -> None:
     confirm = stratified(df[~df.essay_id.isin(used)], CONFIRM_PER_SCORE, seed=CONFIRM_SEED)
     write_jsonl(OUT / "confirm.jsonl", [row(r) for r in confirm.itertuples()])
 
+    # Length-matched confirmation set: like the probe set, from essays not used anywhere else
+    used |= set(confirm.essay_id)
+    confirm_lm = length_matched(df[~df.essay_id.isin(used)], CONFIRM_LM_BAND, CONFIRM_LM_PER_CLASS, CONFIRM_LM_SEED)
+    write_jsonl(OUT / "confirm_lm.jsonl", [row(r) for r in confirm_lm.itertuples()])
+
     print(f"dev: {len(dev)} essays, by score {dev.score.value_counts().sort_index().to_dict()}")
     print(f"main: {len(main)} essays, by score {main.score.value_counts().sort_index().to_dict()}")
     print(f"main words by tier: {main.groupby(main.score.map(tier)).words.median().to_dict()}")
     print(f"probe: {len(probe)} essays, by class {probe.cls.value_counts().to_dict()}, "
           f"median words {probe.groupby('cls').words.median().to_dict()}")
+    print(f"confirm_lm: {len(confirm_lm)} essays, by score {confirm_lm.score.value_counts().sort_index().to_dict()}, "
+          f"median words {confirm_lm.groupby('cls').words.median().to_dict()}")
     print(f"confirm: {len(confirm)} essays, by score {confirm.score.value_counts().sort_index().to_dict()}, "
           f"median words {confirm.groupby(confirm.score.map(tier)).words.median().to_dict()}")
 

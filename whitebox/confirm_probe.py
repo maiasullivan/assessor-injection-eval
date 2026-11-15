@@ -1,14 +1,16 @@
 """Part B confirmation tests, exactly as pre-registered in docs/partB_probe.md §4.
 
-    uv run --group whitebox python whitebox/confirm_probe.py extract   # 120 essays x 3 conditions
-    uv run --group whitebox python whitebox/confirm_probe.py analyse
+    uv run --group whitebox python whitebox/confirm_probe.py extract [confirm|confirm_lm]   # 120 essays x 3 conditions
+    uv run --group whitebox python whitebox/confirm_probe.py analyse [confirm|confirm_lm]
+
+confirm = the first confirmation set (§4); confirm_lm = the length-matched one (§9). Default confirm.
 
 extract: for each confirmation essay, clean / direct / fake_note (no defence, hashed wording),
 one forward pass recording the last-position hidden state at every layer and the digit
 distribution (-> expected score, the "written output"). One .npz per condition in .cache/whitebox/.
 
 analyse: H1-H4 with paired, tier-stratified bootstrap CIs; writes results/whitebox/confirm_*.csv
-and fig6_confirm.png.
+and fig6_confirm.png (fig7_confirm_lm.png for the length-matched set).
 """
 
 import re
@@ -28,13 +30,13 @@ MID_LAYERS, SHALLOW_LAYER = (15, 16, 17), 1
 N_BOOT = 2000
 
 
-def confirm_essays() -> list[dict]:
+def confirm_essays(name: str) -> list[dict]:
     import json
     from assessor_eval.prompts import ASAP
-    return [json.loads(line) for line in (ASAP / "confirm.jsonl").read_text().splitlines()]
+    return [json.loads(line) for line in (ASAP / f"{name}.jsonl").read_text().splitlines()]
 
 
-def extract() -> None:
+def extract(name: str) -> None:
     import torch
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
@@ -46,11 +48,11 @@ def extract() -> None:
     model = AutoModelForCausalLM.from_pretrained(MODEL, dtype=torch.float16).to(device).eval()
     prefill, digits = score_tokens(tok)
     CACHE.mkdir(parents=True, exist_ok=True)
-    essays = confirm_essays()
+    essays = confirm_essays(name)
 
     cache, sys_len = None, 0
     for attack in CONDITIONS:
-        path = CACHE / f"confirm_{attack}.npz"
+        path = CACHE / f"{name}_{attack}.npz"
         if path.exists():
             print(f"{attack}: done already", flush=True)
             continue
@@ -145,7 +147,7 @@ def oof_auroc_scores(X: np.ndarray, weak: np.ndarray, rng_seed: int) -> np.ndarr
     return preds
 
 
-def analyse() -> None:
+def analyse(name: str) -> None:
     import matplotlib.pyplot as plt
     from analyse import style
     from assessor_eval.prompts import ASAP
@@ -156,14 +158,14 @@ def analyse() -> None:
     y = (probe["tier"] == "weak").astype(int)
     probes = {l: make_probe().fit(probe["states"][:, l], y) for l in (*MID_LAYERS, SHALLOW_LAYER)}
 
-    texts = {e["essay_id"]: e["text"] for e in confirm_essays()}
+    texts = {e["essay_id"]: e["text"] for e in confirm_essays(name)}
     probe_texts = {json.loads(l)["essay_id"]: json.loads(l)["text"] for l in (ASAP / "probe_set.jsonl").read_text().splitlines()}
     S_train = np.array([surface_features(probe_texts[i]) for i in probe["essay_id"]])
     surface_clf = make_probe(C=1.0).fit(S_train, y)
 
     rows, per_essay = [], []
     for attack in CONDITIONS:
-        g = load_group(f"confirm_{attack}")
+        g = load_group(f"{name}_{attack}")
         weak = g["tier"] == "weak"
         mid = np.mean([probes[l].predict_proba(g["states"][:, l])[:, 1] for l in MID_LAYERS], axis=0)
         shallow = probes[SHALLOW_LAYER].predict_proba(g["states"][:, SHALLOW_LAYER])[:, 1]
@@ -177,19 +179,19 @@ def analyse() -> None:
         row = {"attack": attack, "n_weak": int(weak.sum()), "n_strong": int((~weak).sum()),
                "auroc_output": auroc(weak, output), "auroc_mid": auroc(weak, mid), "auroc_shallow": auroc(weak, shallow),
                "auroc_surface_probe_set": auroc(weak, surf_base), "auroc_surface_cv": auroc(weak, oof_a),
-               "auroc_surface_plus_mid_cv": auroc(weak, oof_b),
+               "auroc_surface_plus_mid_cv": auroc(weak, oof_b), "auroc_word_count": auroc(weak, -S[:, 0]),
                "mean_expected_weak": g["expected"][weak].mean(), "pass_rate_weak": (g["expected"][weak] >= 3.5).mean()}
-        for name, a, b in [("H1_mid_minus_output", mid, output), ("H3_mid_minus_shallow", mid, shallow),
+        for hyp, a, b in [("H1_mid_minus_output", mid, output), ("H3_mid_minus_shallow", mid, shallow),
                            ("H4_surface_plus_mid_minus_surface", oof_b, oof_a)]:
             d, lo, hi = boot_diff(weak, a, b, rng)
-            row |= {name: d, f"{name}_lo": lo, f"{name}_hi": hi}
+            row |= {hyp: d, f"{hyp}_lo": lo, f"{hyp}_hi": hi}
         rows.append(row)
         per_essay.append(pd.DataFrame({"attack": attack, "essay_id": g["essay_id"], "tier": g["tier"], "true": g["true"],
                                        "expected": g["expected"], "p_weak_mid": mid, "p_weak_shallow": shallow,
                                        **{n: S[:, k] for k, n in enumerate(SURFACE_NAMES)}}))
     res = pd.DataFrame(rows)
-    res.round(3).to_csv(OUT / "confirm_results.csv", index=False)
-    pd.concat(per_essay).round(4).to_csv(OUT / "confirm_per_essay.csv", index=False)
+    res.round(3).to_csv(OUT / f"{name}_results.csv", index=False)
+    pd.concat(per_essay).round(4).to_csv(OUT / f"{name}_per_essay.csv", index=False)
 
     pd.set_option("display.width", 200)
     print(res.T.round(3).to_string())
@@ -209,9 +211,9 @@ def analyse() -> None:
     ax.legend(frameon=False, fontsize=8, ncol=2, loc="upper center", bbox_to_anchor=(0.5, 1.18))
     style(ax)
     fig.tight_layout()
-    fig.savefig(OUT / "fig6_confirm.png", dpi=200, facecolor="#fcfcfb")
+    fig.savefig(OUT / ("fig6_confirm.png" if name == "confirm" else f"fig7_{name}.png"), dpi=200, facecolor="#fcfcfb")
     plt.close(fig)
 
 
 if __name__ == "__main__":
-    {"extract": extract, "analyse": analyse}[sys.argv[1]]()
+    {"extract": extract, "analyse": analyse}[sys.argv[1]](sys.argv[2] if len(sys.argv) > 2 else "confirm")

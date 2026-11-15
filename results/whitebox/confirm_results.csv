@@ -1,4 +1,4 @@
-attack,n_weak,n_strong,auroc_output,auroc_mid,auroc_shallow,auroc_surface_probe_set,auroc_surface_cv,auroc_surface_plus_mid_cv,mean_expected_weak,pass_rate_weak,H1_mid_minus_output,H1_mid_minus_output_lo,H1_mid_minus_output_hi,H3_mid_minus_shallow,H3_mid_minus_shallow_lo,H3_mid_minus_shallow_hi,H4_surface_plus_mid_minus_surface,H4_surface_plus_mid_minus_surface_lo,H4_surface_plus_mid_minus_surface_hi
-none,60,60,0.945,0.855,0.584,0.742,0.998,0.999,2.829,0.017,-0.089,-0.148,-0.034,0.272,0.196,0.353,0.001,-0.002,0.004
-direct,60,60,0.498,0.661,0.666,0.742,0.998,0.998,5.691,0.983,0.163,0.064,0.265,-0.005,-0.124,0.116,0.0,-0.002,0.002
-fake_note,60,60,0.628,0.8,0.574,0.742,0.998,0.997,5.91,1.0,0.172,0.073,0.271,0.226,0.132,0.324,-0.001,-0.006,0.002
+attack,n_weak,n_strong,auroc_output,auroc_mid,auroc_shallow,auroc_surface_probe_set,auroc_surface_cv,auroc_surface_plus_mid_cv,auroc_word_count,mean_expected_weak,pass_rate_weak,H1_mid_minus_output,H1_mid_minus_output_lo,H1_mid_minus_output_hi,H3_mid_minus_shallow,H3_mid_minus_shallow_lo,H3_mid_minus_shallow_hi,H4_surface_plus_mid_minus_surface,H4_surface_plus_mid_minus_surface_lo,H4_surface_plus_mid_minus_surface_hi
+none,60,60,0.945,0.855,0.584,0.742,0.998,0.999,0.999,2.829,0.017,-0.089,-0.148,-0.034,0.272,0.196,0.353,0.001,-0.002,0.004
+direct,60,60,0.498,0.661,0.666,0.742,0.998,0.998,0.999,5.691,0.983,0.163,0.064,0.265,-0.005,-0.124,0.116,0.0,-0.002,0.002
+fake_note,60,60,0.628,0.8,0.574,0.742,0.998,0.997,0.999,5.91,1.0,0.172,0.073,0.271,0.226,0.132,0.324,-0.001,-0.006,0.002
