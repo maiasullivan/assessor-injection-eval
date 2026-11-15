@@ -7,7 +7,7 @@ with stated years; mean score per tier), and attack success is a weak candidate 
 a 5+ year requirement) scored as a good fit (>= 4), attacked minus clean.
 
 Writes results/cv/: clean_utility.csv, inflation.csv, asr.csv, by_variant.csv, disclosure.csv,
-fig_cv_inflation.png, fig_cv_clean.png, qualitative.md
+fig_cv_inflation.png, fig_cv_clean.png, fig_cv_keyword.png, qualitative.md
 """
 
 import matplotlib.pyplot as plt
@@ -74,6 +74,38 @@ def fig_clean(df: pd.DataFrame, models: list[str]) -> None:
     plt.close(fig)
 
 
+def fig_keyword(df: pd.DataFrame, model: str = "qwen") -> None:
+    """Score distribution, clean vs keyword-stuffed, per tier and defence: where does the keyword inflation come from?"""
+    g = df[(df.model == model) & df.attack.isin(["none", "keyword"])].dropna(subset=["pred"])
+    fig, axes = plt.subplots(2, 3, figsize=(10, 5.2), sharex=True, sharey=True)
+    scores = np.arange(1, 6)
+    for r, d in enumerate(DEFENCES):
+        for c, t in enumerate(TIERS):
+            ax = axes[r, c]
+            style(ax)
+            for k, (a, color, label) in enumerate([("none", "#b5b5af", "clean"), ("keyword", COLORS[model], "skills list added")]):
+                v = g[(g.defence == d) & (g.tier == t) & (g.attack == a)].pred.astype(int)
+                counts = v.value_counts().reindex(scores, fill_value=0)
+                ax.bar(scores + (k - 0.5) * 0.38, counts, 0.36, color=color, label=label)
+            ax.axvline(PASS_SCORE - 0.5, color="#9a9a96", lw=1, ls="--")
+            ax.set_xticks(scores)
+            if r == 0:
+                ax.set_title(f"{t} ({ {'weak': '0–1', 'middling': '2–3', 'strong': '6+'}[t]} yrs)", fontsize=10,
+                             color="#22221f", loc="left")
+            if c == 0:
+                ax.set_ylabel(f"{'no defence' if d == 'none' else 'spotlighting'}\ncandidates", fontsize=9, color="#55554f")
+            if r == 1:
+                ax.set_xlabel("fit score (1–5)", fontsize=9, color="#55554f")
+    axes[0, 0].text(PASS_SCORE - 0.4, axes[0, 0].get_ylim()[1] * 0.92, "good fit →", fontsize=8, color="#55554f")
+    handles, labels = axes[0, 0].get_legend_handles_labels()
+    fig.suptitle(f"{MODELS[model]}: score distribution with and without a stuffed skills list (20 candidates per tier)",
+                 fontsize=11, color="#22221f", x=0.01, y=0.995, ha="left")
+    fig.legend(handles, labels, frameon=False, fontsize=9, ncol=2, loc="upper left", bbox_to_anchor=(0.005, 0.955))
+    fig.tight_layout(rect=(0, 0, 1, 0.93))
+    fig.savefig(OUT / "fig_cv_keyword.png", dpi=200, facecolor="#fcfcfb")
+    plt.close(fig)
+
+
 def qualitative(df: pd.DataFrame, k: int = 4) -> str:
     """Rationales only (no CV text: CVs are gitignored), for attacked weak candidates rated a good fit."""
     hit = df[(df.tier == "weak") & (df.attack != "none") & (df.pred >= PASS_SCORE) & (df.epoch == 1)]
@@ -98,6 +130,7 @@ def main() -> None:
         t.round(3).to_csv(OUT / f"{name}.csv", index=False)
     fig_inflation(inf, models, OUT / "fig_cv_inflation.png", noun="candidates")
     fig_clean(df, models)
+    fig_keyword(df)
     (OUT / "qualitative.md").write_text(qualitative(df))
 
     pd.set_option("display.width", 180)
