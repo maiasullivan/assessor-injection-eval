@@ -121,6 +121,78 @@ All comparisons use AUROC for separating the confirmation set's 60 weak from 60 
 
 **Our prediction, stated in advance:** H1 likely holds. H3 likely fails, given that the layer-1 probe survived the attack just as well in the original run. H4 has low power, because human scores track length closely (Spearman 0.73), so the surface features alone may already be near the ceiling. Only H1 is primary. The others are reported without multiple-comparison correction, labelled secondary.
 
-## 5. Results
+## 5. Results (run Sun 15 Nov, after the pre-registration commit `c8c14c5`)
 
-*To be added after the run.*
+Files: `results/whitebox/confirm_results.csv` (all numbers below), `confirm_per_essay.csv`, `fig6_confirm.png`.
+
+### 5.1 The attacks worked on the new essays (precondition met)
+
+| Condition | Mean expected score, weak essays | Weak essays scored as a pass (expected score ≥ 3.5) | Output AUROC, weak vs strong |
+|---|---|---|---|
+| clean | 2.83 | 2% | 0.94 |
+| direct | 5.69 | 98% | 0.50 |
+| fake_note | 5.91 | 100% | 0.63 |
+
+Without an attack, Qwen separates weak from strong essays well (0.94). Under attack, its written score loses almost all of that. Under `direct` it's a coin flip (0.50), because nearly everything gets a 6. The precondition (output AUROC under `fake_note` below 0.80) is met.
+
+### 5.2 Main table
+
+| AUROC, weak vs strong (60 + 60) | clean | direct | fake_note |
+|---|---|---|---|
+| Model's written score (expected score) | **0.94** | 0.50 | 0.63 |
+| Probe, layers 15–17 (pre-registered) | 0.86 | **0.66** | **0.80** |
+| Probe, layer 1 | 0.58 | 0.67 | 0.57 |
+| Surface features, trained on the probe set | 0.74 | 0.74 | 0.74 |
+| Surface features, fitted on these essays (cross-validated) | 1.00 | 1.00 | 1.00 |
+
+(The surface features are computed from the essay text before the attack is added, so they're identical across conditions.)
+
+### 5.3 Hypotheses
+
+| | Comparison | Difference [95% CI] | Verdict |
+|---|---|---|---|
+| **H1 (primary)** | fake_note: mid probe − output | **+0.17 [+0.07, +0.27]** | **Confirmed** |
+| H2 | direct: mid probe − output | +0.16 [+0.06, +0.27] | Confirmed |
+| H3 | fake_note: mid probe − layer-1 probe | +0.23 [+0.13, +0.32] | Confirmed (we predicted it would fail), but see 6.2 |
+| H3, direct (not pre-registered as a hypothesis) | direct: mid probe − layer-1 probe | −0.01 [−0.12, +0.12] | No difference |
+| H4 | fake_note: (surface + mid probe) − surface only, fitted on these essays | −0.00 [−0.01, +0.00] | **Uninformative**: ceiling (6.3), as we predicted |
+
+## 6. What this means
+
+### 6.1 The main finding holds up on fresh essays
+With the layers fixed in advance and 120 essays never seen before, the middle layers of Qwen still separate weak from strong essays under attack (0.80 for `fake_note`, 0.66 for `direct`). The written score largely can't (0.63 and 0.50). The gap is about the same size as in the original run (+0.17 here vs +0.29 there; the original was inflated by picking the best layers after looking).
+
+In plain words: **after being told the essay is a 6, Qwen writes a 6. But part of its internal state still reflects whether the essay is weak or strong. The instruction overrides that information when the score is produced; it doesn't erase it.** That's the "knows better" pattern.
+
+The internal signal is *weakened*, though, not untouched. The mid probe falls from 0.86 (clean) to 0.80 (`fake_note`) and 0.66 (`direct`). The blunt instruction disturbs the internal representation more than the fake note does.
+
+### 6.2 The layer-1 comparison is less clean than it looks
+H3 came out "confirmed", against our prediction. But the reason matters. On the new essays, the layer-1 probe is poor even *without* an attack (0.58, vs 0.81 on the original main set). It doesn't carry over from the length-matched training essays to these unmatched ones. So the large H3 difference mostly shows that **the middle-layer signal generalises to new essays much better than the layer-1 signal does**. It doesn't show that the layer-1 signal "dies" under attack.
+
+That's still evidence against the simplest worry: if the mid-layer probe were just reading surface text features the way layer 1 does, it should generalise about as badly, and it doesn't. But it isn't a clean demonstration that the middle layers hold a judgement and layer 1 doesn't. Under `direct`, the two probes are equal (0.66 vs 0.67).
+
+### 6.3 Test 2 was uninformative, and why that's itself worth knowing
+On these essays, **word count alone separates weak from strong almost perfectly (AUROC 0.999)**. Weak essays have a median of 219 words, strong ones 496. Spelling, capitalisation and word length are much weaker (0.55–0.67). A surface classifier fitted to these essays therefore hits the ceiling (1.00), and there's no room left to show the probe adds anything. We predicted this before running it.
+
+Two consequences:
+- **We can't rule out that the mid-layer probe partly tracks essay length.** It was trained on length-matched essays, so it was never *rewarded* for using length. But the model's hidden state might still encode length, and length happens to be very informative on these essays. A length-matched confirmation set would answer this. That's the most important next check.
+- **A side observation for the write-up:** on a coarse weak-vs-strong split, a one-line word-count rule beats the AI marker even without any attack (0.999 vs 0.94), and no prompt injection can change an essay's word count (though a student could pad it). This doesn't mean word count is a good marker; it can't tell a 4 from a 5, and it's trivially gamed. But it's a useful reminder of how coarse this comparison is.
+
+### 6.4 Overall verdict
+- **Confirmed (pre-registered, fresh data):** under prompt injection, Qwen3-4B's middle-layer hidden states keep information about essay quality that its written score loses.
+- **Not established:** that this information is a "judgement" rather than surface or length information, and that the model *uses* it. The probe shows the information is *present*, not that it plays any causal role.
+
+## 7. Limitations
+
+- One model (Qwen3-4B), fp16 on a laptop GPU, one essay prompt.
+- The weak-vs-strong contrast is coarse. Middling essays (score 3) are excluded, and the contrast is easy on length alone.
+- The probes are trained on length-matched essays and tested on unmatched ones (a distribution shift). The mid-layer probe coped with it, and the layer-1 probe didn't.
+- **Last-token position:** the hidden state just before the score digit may partly encode "the score I'm about to write". That would *work against* our finding, since the written score is 6 under attack, so it's not an explanation for it, but it muddies what the probe reads.
+- AUROC is a ranking measure. It says the probe still *orders* essays correctly, not that a fixed threshold would work, because attacks shift every essay's internal state (section 3.1).
+
+## 8. Next steps (for the honours project)
+
+1. **Length-matched confirmation set** (cheap; about 45 minutes): repeat H1 and H4 on essays where length can't separate weak from strong, to rule out length as the carrier.
+2. **Causal test (activation patching):** copy the middle-layer state from the clean run of an essay into its attacked run and see whether the written score returns to the clean score. That would test whether the model *uses* this information.
+3. **Finer labels:** a probe for the full 1–6 score (or human score regression), including middling essays.
+4. **More models**, including a larger open model on a cloud GPU, and the quantised build actually deployed.
