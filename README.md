@@ -6,7 +6,7 @@ Maia Sullivan · November 2026 · built with [Inspect](https://inspect.aisi.org.
 
 ---
 
-I wanted to know whether a line of text hidden inside a student essay could persuade an AI marker to give that essay a grade it had not earned. This repository is the record of a long weekend spent finding out. It began as a simple behavioural test, and each answer raised a sharper question, which in the end took me inside the weights of a small open model. The chapters below follow that order, because the order is part of what I learned.
+What I wanted from this weekend was ato 'dip my toes' into AI interpretability: by looking inside a model at the moment it gets something 'wrong' and discern what it still knows. This began with a behavioural question: could a line of text hidden in a student essay, or in a CV, persuade an AI assessor to give a grade the essay had not earned, or a job its author was not qualified for? Then, a follow up question: when the model is tricked, has it lost track of how good the essay is, or is that knowledge still sitting in its activations? The chapters below follow the order in which I worked, from the behavioural test to the inside of a small open model, because that order is part of what I learned.
 
 **In brief**
 
