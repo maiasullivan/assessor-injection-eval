@@ -1,25 +1,13 @@
-"""White-box Part B (stretch): does Qwen3-4B "know better" than the score it writes?
+"""Part B: does Qwen3-4B "know" an essay is weak when it writes a 6?
 
     uv run --group whitebox python whitebox/linear_probe.py extract   # forward passes -> .cache/whitebox/
-    uv run --group whitebox python whitebox/linear_probe.py analyse   # probes, tables, figure
+    uv run --group whitebox python whitebox/linear_probe.py analyse   # probes, tables, fig4, fig5
 
-extract: the residual-stream hidden state at the last prompt token (the position that predicts
-the score digit, after the "SCORE: " prefill), at every layer, for
-  - probe_set.jsonl: 200 clean, length-matched essays (100 weak, 100 strong), to train the probes
-  - the 60-essay main set, clean and under each attack, no defence (main-matrix wordings)
-  - the 20 weak essays under every direct/fake_note wording, no defence (wording follow-up)
-Each group is saved as its own .npz, so an interrupted run resumes by group.
-
-analyse: a logistic-regression probe per layer, weak vs strong, 5-fold CV on the probe set, with
-a shuffled-label control and a length-only baseline. The best layer's probe (trained on all 200
-clean essays) is applied to attacked weak essays and compared with the score the model writes
-(the fp16 argmax from Part A, same weights). Writes results/whitebox/probe_*.csv, fig4 and fig5.
-
-Control: the injected text shifts *every* essay's hidden state, strong ones included (at some
-layers the probe calls attacked strong essays "weak"), so "probe says weak while the output says 6"
-is confounded. The cleaner test is ranking: within one attack condition, does the probe still
-separate the main set's weak from strong essays (AUROC), compared with the model's own expected
-score? That is insensitive to a shift shared by all essays.
+extract saves the hidden state at the last prompt position, every layer, for the probe set
+(clean), the main set (clean and each attack) and the wording follow-up.
+analyse trains a weak-vs-strong probe per layer on the clean probe set and compares it with the
+model's own expected score. The attack shifts every essay's hidden state, so the comparison
+that counts is ranking (AUROC within a condition), not the probe's raw verdict.
 """
 
 import sys
@@ -108,7 +96,7 @@ def analyse() -> None:
     import matplotlib.pyplot as plt
     from sklearn.model_selection import StratifiedKFold, cross_val_score
 
-    from analyse import style
+    from figstyle import ATTACK_LABELS, COLORS, INK, MUTED, RULE, WIDTH, save, style
     from assessor_eval.attacks import ATTACKS, pick_variant
 
     probe = load_group("probe_clean")
@@ -199,23 +187,24 @@ def analyse() -> None:
           surv[surv.layer.isin([best, 10, 15, 17, 30, 36])].pivot(index="layer", columns="attack", values="auroc").round(2).to_string(),
           "\noutput:", {a: round(v, 2) for a, v in out_auroc.items()})
 
-    fig, ax = plt.subplots(figsize=(7.5, 3.8))
-    shades = {"none": "#1f1f1d", "direct": "#1baf7a", "fake_note": "#2a78d6", "keyword": "#8a8a84"}
-    for a, g in surv.groupby("attack"):
-        ax.plot(g.layer, g.auroc, color=shades[a], lw=2 if a != "keyword" else 1.5, label=f"probe, {'clean' if a == 'none' else a}")
-        ax.axhline(out_auroc[a], color=shades[a], lw=1, ls="--")
-    ax.axhline(0.5, color="#c9c9c4", lw=1, zorder=0)
-    ax.text(36.3, 0.5, "chance", fontsize=8, color="#5c5c57", va="center")
+    fig, ax = plt.subplots(figsize=(WIDTH, 3.0))
+    shades = {"none": INK, "direct": COLORS["sonnet"], "fake_note": COLORS["haiku"], "keyword": "#9a9a9a"}
+    for a in ["none", "direct", "fake_note", "keyword"]:
+        g = surv[surv.attack == a]
+        ax.plot(g.layer, g.auroc, color=shades[a], lw=1.3 if a != "keyword" else 1.0, label=ATTACK_LABELS[a])
+        ax.axhline(out_auroc[a], color=shades[a], lw=0.8, ls=(0, (4, 3)))
+    ax.axhline(0.5, color=RULE, lw=0.6, ls=":", zorder=0)
+    ax.text(36.5, 0.5, "chance", fontsize=8, color=MUTED, va="center", fontstyle="italic")
     ax.set_xlabel("Layer")
-    ax.set_ylabel("AUROC, weak vs strong essays")
+    ax.set_ylabel("AUROC, weak vs strong")
+    ax.set_xlim(0, 36)
     ax.set_ylim(0.3, 1.02)
-    ax.legend(frameon=False, fontsize=8, loc="lower left", ncol=2)
-    ax.set_title("Does quality information survive the attack? Probe (solid) vs model's own score (dashed)",
-                 fontsize=10, loc="left")
+    leg = ax.legend(loc="lower left", ncol=4, title="Solid: probe.  Dashed: model's own score.", title_fontsize=8,
+                    alignment="left")
+    leg.get_title().set_color(MUTED)
     style(ax)
     fig.tight_layout()
-    fig.savefig(OUT / "fig5_probe_ranking.png", dpi=200, facecolor="#fcfcfb")
-    plt.close(fig)
+    save(fig, OUT / "fig5_probe_ranking.png")
 
     layers.assign(length_only_acc=length_acc).round(3).to_csv(OUT / "probe_layers.csv", index=False)
     transfer.round(3).to_csv(OUT / "probe_transfer.csv", index=False)
@@ -226,21 +215,20 @@ def analyse() -> None:
     print("\nTransfer to the clean main set\n", transfer.round(2).to_string(index=False))
     print("\nAttacked weak essays: probe vs output\n", key.round(2).to_string(index=False))
 
-    fig, ax = plt.subplots(figsize=(7, 3.6))
-    ax.plot(layers.layer, layers.cv_acc, color="#1baf7a", lw=2, label="probe (weak vs strong)")
-    ax.plot(layers.layer, layers.shuffled_acc, color="#8a8a84", lw=1.5, ls="--", label="shuffled-label control")
-    ax.axhline(length_acc, color="#5c5c57", lw=1, ls=":", label=f"length only ({length_acc:.2f})")
-    ax.axvline(best, color="#c9c9c4", lw=1, zorder=0)
+    fig, ax = plt.subplots(figsize=(WIDTH, 2.8))
+    ax.plot(layers.layer, layers.cv_acc, color=COLORS["qwen"], lw=1.4, label="probe, weak vs strong")
+    ax.plot(layers.layer, layers.shuffled_acc, color="#9a9a9a", lw=1.0, ls=(0, (4, 3)), label="shuffled-label control")
+    ax.axhline(length_acc, color=MUTED, lw=0.8, ls=":", label=f"essay length only ({length_acc:.2f})")
+    ax.axvline(best, color=RULE, lw=0.6, zorder=0)
+    ax.text(best + 0.4, 0.33, f"best layer ({best})", fontsize=8, color=MUTED, fontstyle="italic")
     ax.set_xlabel("Layer (0 = embeddings)")
-    ax.set_ylabel("5-fold CV accuracy")
+    ax.set_ylabel("Cross-validated accuracy")
+    ax.set_xlim(0, 36)
     ax.set_ylim(0.3, 1.02)
-    ax.legend(frameon=False, fontsize=8, loc="lower right")
-    ax.set_title("Linear probe on Qwen3-4B's last prompt token, 200 clean essays", fontsize=10, loc="left")
+    ax.legend(loc="center right")
     style(ax)
     fig.tight_layout()
-    fig.savefig(OUT / "fig4_probe_layers.png", dpi=200, facecolor="#fcfcfb")
-    plt.close(fig)
-
+    save(fig, OUT / "fig4_probe_layers.png")
 
 if __name__ == "__main__":
     sys.path[:0] = [str(ROOT / "whitebox"), str(ROOT / "scripts")]

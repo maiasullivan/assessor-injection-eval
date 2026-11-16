@@ -1,14 +1,12 @@
-"""Phase 4: run every attack x defence condition for each model on the 60-essay main set.
+"""Run every attack x defence condition for one model.
 
-    uv run python scripts/run_matrix.py --model haiku
     uv run python scripts/run_matrix.py --model sonnet
-    uv run python scripts/run_matrix.py --model qwen
-    uv run python scripts/run_matrix.py --model haiku --domain cv            # CV screening (logs/matrix_cv/)
-    uv run python scripts/run_matrix.py --model haiku --domain cv --split dev # quick check (logs/dev_cv/)
+    uv run python scripts/run_matrix.py --model qwen --domain cv
+    uv run python scripts/run_matrix.py --model haiku --domain cv --split dev
 
-Each model gets its own log dir under logs/matrix/. eval_set skips conditions that already
-finished, so a re-run after an interruption only does what's missing. Conditions run one at a
-time (max_tasks=1) so the cached system prompt is reused within a condition.
+Logs go to logs/matrix/<model> (logs/matrix_cv/ for CVs). eval_set skips finished conditions,
+so re-running after an interruption picks up where it stopped. max_tasks=1 keeps the system
+prompt cache warm within a condition.
 """
 
 import argparse

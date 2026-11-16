@@ -1,12 +1,8 @@
-"""Analyse Part A (results/whitebox/score_dist.csv): agreement with Ollama, shift vs flatten, entropy AUROC.
+"""Part A analysis: agreement with the Ollama runs, shift vs flatten, entropy as a detector.
 
     uv run --group whitebox python whitebox/analyse_distribution.py
 
-Writes results/whitebox/:
-  agreement.csv      HF fp16 argmax vs the Ollama (Q4_K_M) generated score, per condition
-  weak_summary.csv   weak essays: mean expected score, p(score >= 4), entropy, max prob; change vs clean
-  auroc.csv          entropy / (1 - max prob) as a detector of attacked vs clean weak essays, 95% CI
-  fig3_expected_score.png  expected score per weak essay, clean vs each attack (paired dot plot)
+Writes results/whitebox/: agreement.csv, weak_summary.csv, auroc.csv, fig3_expected_score.png
 """
 
 import sys
@@ -19,10 +15,11 @@ from sklearn.metrics import roc_auc_score
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
-from analyse import LOGS, load, style  # noqa: E402
+from analyse import LOGS, load  # noqa: E402
+from figstyle import ATTACK_LABELS, COLORS, DEFENCE_LABELS, GRID, INK, MUTED, PAPER, RULE, WIDTH, panel, save, style  # noqa: E402
 
 OUT = ROOT / "results" / "whitebox"
-QWEN = "#1baf7a"
+QWEN = COLORS["qwen"]
 N_BOOT, RNG = 2000, np.random.default_rng(0)
 ATTACKS = ["direct", "fake_note", "keyword"]
 
@@ -79,29 +76,27 @@ def auroc(dist: pd.DataFrame) -> pd.DataFrame:
 def fig_expected(dist: pd.DataFrame) -> None:
     w = dist[(dist.tier == "weak") & (dist.set == "main")]
     conds = ["none", *ATTACKS]
-    fig, axes = plt.subplots(1, 2, figsize=(9, 4), sharey=True)
-    for ax, d in zip(axes, ["none", "spotlight"]):
+    fig, axes = plt.subplots(1, 2, figsize=(WIDTH, 3.0), sharey=True)
+    for ax, letter, d in zip(axes, "ab", ["none", "spotlight"]):
         piv = w[w.defence == d].pivot(index="essay_id", columns="attack", values="expected")[conds]
         x = np.arange(len(conds))
         for _, r in piv.iterrows():
             for j in range(1, len(conds)):  # line from each essay's clean score to its attacked score
-                ax.plot([0, j], [r["none"], r[conds[j]]], color="#c9c9c4", lw=0.8, zorder=1)
+                ax.plot([0, j], [r["none"], r[conds[j]]], color=GRID, lw=0.6, zorder=1)
         for j, c in enumerate(conds):
             jitter = RNG.uniform(-0.08, 0.08, len(piv))
-            ax.scatter(x[j] + jitter, piv[c], s=22, color=QWEN, edgecolor="#fcfcfb", linewidth=1, zorder=2)
-            ax.hlines(piv[c].mean(), x[j] - 0.25, x[j] + 0.25, color="#1f1f1d", lw=2, zorder=3)
-        ax.axhline(4, color="#8a8a84", lw=1, ls="--", zorder=0)
-        ax.set_xticks(x, ["clean", "direct", "fake_note", "keyword"])
-        ax.set_title("No defence" if d == "none" else "Spotlighting", fontsize=11, loc="left")
+            ax.scatter(x[j] + jitter, piv[c], s=12, color=QWEN, edgecolor=PAPER, linewidth=0.5, zorder=2)
+            ax.hlines(piv[c].mean(), x[j] - 0.22, x[j] + 0.22, color=INK, lw=1.4, zorder=3)
+        ax.axhline(4, color=RULE, lw=0.8, ls=(0, (4, 3)), zorder=0)
+        ax.set_xticks(x, [ATTACK_LABELS[c] for c in conds])
+        ax.tick_params(axis="x", length=0)
+        panel(ax, letter, DEFENCE_LABELS[d])
         ax.set_ylim(0.8, 6.2)
-        style(ax)
-    axes[0].set_ylabel("Expected score E[s] (Qwen3-4B)")
-    axes[0].text(len(conds) - 0.5, 4.05, "pass (4)", fontsize=8, color="#5c5c57", ha="right", va="bottom")
-    fig.suptitle("Weak essays (human score 1–2): expected score from the next-token distribution\n"
-                 "dots = essays, bar = mean, grey lines join each essay to its clean score", fontsize=10, x=0.01, ha="left")
+        style(ax, grid=None)
+    axes[0].set_ylabel("Expected score $\\mathrm{E}[s]$")
+    axes[1].text(len(conds) - 0.55, 4.08, "pass", fontsize=8, color=MUTED, ha="right", va="bottom", fontstyle="italic")
     fig.tight_layout()
-    fig.savefig(OUT / "fig3_expected_score.png", dpi=200, facecolor="#fcfcfb")
-    plt.close(fig)
+    save(fig, OUT / "fig3_expected_score.png")
 
 
 def main() -> None:

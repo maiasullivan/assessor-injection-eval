@@ -1,19 +1,10 @@
-"""Build the essay samples from the raw ASAP 2.0 CSV (not committed; see README).
+"""Build the essay sets from the raw ASAP 2.0 csv ("Exploring Venus" prompt only).
 
     uv run python scripts/build_asap_sample.py
 
-Writes (all from the "Exploring Venus" prompt only):
-  data/asap/task.json         assignment text + source article (identical for every essay)
-  data/asap/essays.jsonl      main set: 60 essays stratified by human score
-  data/asap/dev.jsonl         dev set: 20 more essays, the only ones prompt changes may be tuned on
-  data/asap/probe_set.jsonl   Part B: 100 weak (1-2) + 100 strong (4-6), length-matched, disjoint from main set
-  data/asap/confirm.jsonl     Part B confirmation: 60 weak + 60 strong essays never used before
-                              (pre-registered in docs/partB_probe.md; drawn like the main set, seed 1)
-  data/asap/confirm_lm.jsonl  Part B length-matched confirmation: 60 weak + 60 strong, never used before,
-                              matched in 20-word bins within 250-500 words (pre-registered, §9)
-
-Only `essay_id`, the essay text and the human score are kept. Demographic columns are dropped.
-The score and id are stored for scoring/analysis only and must never be put in a model input.
+Writes data/asap/: task.json, essays.jsonl (main, 60), dev.jsonl (20), probe_set.jsonl (200,
+length-matched), confirm.jsonl and confirm_lm.jsonl (120 each). All sets are disjoint.
+Demographic columns are dropped. See docs/methods.md for how each set is drawn.
 """
 
 import json

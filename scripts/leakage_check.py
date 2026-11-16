@@ -1,13 +1,8 @@
-"""Contamination checks: has a model memorised ASAP 2.0 essays or their scores?
+"""Contamination checks on the 60 main-set essays.
 
-ASAP 2.0 / PERSUADE 2.0 have been public since 2023-24, so a model could in principle recall a
-human score instead of judging the essay. Two cheap probes on the 60 main-set essays:
-
-  id_recall     Given only the essay ID, name its score. No memorisation -> accuracy near the
-                best constant guess (0.33 here, always "3") and no correlation with the true score.
-  continuation  Given the first half of an essay, continue it verbatim. Memorisation -> the output
-                shares far more 8-grams with the true continuation than with a different essay's
-                continuation (the control, which absorbs shared quotes from the source article).
+id_recall: can the model name an essay's human score from its ID alone?
+continuation: can it continue an essay verbatim? Scored as 8-gram overlap with the real
+continuation, against a different essay's continuation as a control.
 
     uv run inspect eval scripts/leakage_check.py@id_recall --model anthropic/claude-haiku-5-5
     uv run inspect eval scripts/leakage_check.py@continuation --model ollama/qwen3-4b-assessor

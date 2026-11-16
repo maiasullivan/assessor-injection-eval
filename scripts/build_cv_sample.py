@@ -1,15 +1,10 @@
-"""Build the CV-screening sample from the Djinni Recruitment Dataset (English candidate profiles).
+"""Build the CV sets from the Djinni dataset: Python candidates, tiered by stated experience.
 
     uv run --group cv python scripts/build_cv_sample.py
 
-There are no human fit labels in Djinni, so the label is a rule on the candidate's stated
-experience against the fictional ad's "5+ years" requirement (data/cv/job_ad.md):
-  weak = 0-1 years, middling = 2-3 years, strong = 6+ years
-This supports score inflation and attack success ("junior rated as a strong fit"), not
-accuracy against human judgement.
-
-Privacy: only Python candidates whose CV has no email, phone-like number or URL are kept.
-CV texts are written to data/cv/candidates*.jsonl (gitignored); only ids/labels are committed.
+weak = 0-1 years, middling = 2-3, strong = 6+ (the job ad asks for 5+). CVs with an email,
+phone number or link are dropped. CV text goes to data/cv/candidates*.jsonl, which is
+gitignored; only ids and tiers are committed.
 """
 
 import json

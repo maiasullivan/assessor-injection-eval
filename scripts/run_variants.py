@@ -1,14 +1,11 @@
-"""Follow-up to Phase 4: every wording of `direct` and `fake_note` on every weak essay.
+"""Wording follow-up: every wording of each attack on every weak item.
 
     uv run python scripts/run_variants.py --model sonnet
-    uv run python scripts/run_variants.py --model sonnet --domain cv   # logs/variants_cv/
+    uv run python scripts/run_variants.py --model sonnet --domain cv
 
-In the main matrix each essay always gets the same (hashed) wording, so a wording's success rate
-is confounded with which essays drew it. Here all 20 weak essays get all 3 wordings, with no
-defence (and spotlighting too for Qwen, which is free). Clean baselines come from logs/matrix/.
-
-CV: all 3 wordings of all three attacks (keyword included: it was the one spotlighting did not stop)
-on the 20 weak candidates, with and without spotlighting for every model. Baselines: logs/matrix_cv/.
+Essays: direct and fake_note, no defence (Qwen also with spotlighting).
+CVs: all three attacks, with and without spotlighting, for every model.
+Clean baselines come from the main matrix logs.
 """
 
 import argparse

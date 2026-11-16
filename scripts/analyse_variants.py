@@ -1,12 +1,9 @@
-"""Analyse the wording follow-up (scripts/run_variants.py): ASR per wording on all 20 weak items.
+"""Attack success per wording for the follow-up runs.
 
-    uv run python scripts/analyse_variants.py              # essays: logs/variants/ -> results/
-    uv run python scripts/analyse_variants.py --domain cv  # CVs: logs/variants_cv/ -> results/cv/
+    uv run python scripts/analyse_variants.py              # logs/variants/ -> results/
+    uv run python scripts/analyse_variants.py --domain cv  # logs/variants_cv/ -> results/cv/
 
-Writes variants_asr.csv (and prints it). The clean pass rate of each item comes from the main
-matrix (same model, defence, items and epochs), so ASR = attacked - clean as in asr.csv.
-Figures: fig_variants.png (ASR per wording, 95% CI) and fig_variant_grid.png (item x wording:
-is vulnerability a property of the wording or of the item?).
+Clean pass rates come from the main matrix, so ASR here is defined as in asr.csv.
 """
 
 import argparse
@@ -16,7 +13,8 @@ import numpy as np
 import pandas as pd
 from matplotlib.colors import LinearSegmentedColormap
 
-from analyse import COLORS, DISCLOSED, LOGS, MODELS, OUT, PASS_SCORE, boot_ci, load, per_essay_means, style
+from analyse import DISCLOSED, LOGS, MODELS, OUT, PASS_SCORE, boot_ci, load, per_essay_means
+from figstyle import ATTACK_LABELS, COLORS, DEFENCE_LABELS, INK, MUTED, PALE, PAPER, WIDTH, panel, save, style
 
 DOMAINS = {  # variant logs, clean-baseline logs, output dir, noun
     "essay": (LOGS.parent / "variants", LOGS, OUT, "essays"),
@@ -49,41 +47,41 @@ def fig_variants(t: pd.DataFrame, path, noun: str) -> None:
     attacks = [a for a in ["direct", "fake_note", "keyword"] if a in set(t.attack)]
     defences = [d for d in ["none", "spotlight"] if d in set(t.defence)]
     models = [m for m in MODELS if m in set(t.model)]
-    fig, axes = plt.subplots(len(defences), len(attacks), figsize=(3.4 * len(attacks), 2.9 * len(defences) + 0.5),
+    fig, axes = plt.subplots(len(defences), len(attacks), figsize=(WIDTH, 2.1 * len(defences) + 0.2),
                              sharey=True, squeeze=False)
-    off = np.linspace(-0.22, 0.22, len(models))
+    off = np.linspace(-0.2, 0.2, len(models))
     for r, d in enumerate(defences):
         for c, a in enumerate(attacks):
             ax = axes[r, c]
             style(ax)
-            ax.axhline(0, color="#55554f", lw=0.8)
+            ax.axhline(0, color=INK, lw=0.6)
             for i, m in enumerate(models):
                 g = t[(t.model == m) & (t.defence == d) & (t.attack == a)].sort_values("variant")
                 if g.empty:
                     continue
                 ax.errorbar(g.variant + off[i], g.asr, yerr=[g.asr - g.ci_low, g.ci_high - g.asr], fmt="none",
-                            ecolor=COLORS[m], elinewidth=1.4, capsize=0, alpha=0.6)
-                ax.scatter(g.variant + off[i], g.asr, s=46, color=COLORS[m], edgecolor="#fcfcfb", linewidth=1.5,
+                            ecolor=COLORS[m], elinewidth=0.9, capsize=0, alpha=0.8)
+                ax.scatter(g.variant + off[i], g.asr, s=22, color=COLORS[m], edgecolor=PAPER, linewidth=0.6,
                            zorder=3, label=MODELS[m])
-            ax.set_xticks(range(3), ["wording 0", "wording 1", "wording 2"])
+            ax.set_xticks(range(3), ["W0", "W1", "W2"])
+            ax.tick_params(axis="x", length=0)
             ax.set_xlim(-0.5, 2.5)
             ax.set_ylim(-0.3, 1.05)
-            ax.set_title(f"{a} · defence: {d}", fontsize=10, color="#22221f", loc="left")
+            panel(ax, "abcdef"[r * len(attacks) + c], f"{ATTACK_LABELS[a].capitalize()}, {DEFENCE_LABELS[d].lower()}")
             if c == 0:
-                ax.set_ylabel(f"ASR (weak {noun}\nrated ≥ 4, attacked − clean)", fontsize=9, color="#55554f")
+                ax.set_ylabel("Attack success rate")
+            if r == len(defences) - 1:
+                ax.set_xlabel("Wording")
     handles, labels = [], []
-    for ax in axes.flat:  # collect one handle per model (some panels lack a model)
+    for ax in axes.flat:  # some panels lack a model
         for h, l in zip(*ax.get_legend_handles_labels()):
             if l not in labels:
                 handles.append(h)
                 labels.append(l)
-    fig.suptitle(f"Every wording on all 20 weak {noun}: attack success per wording (95% CI)",
-                 fontsize=11, color="#22221f", x=0.01, y=0.995, ha="left")
-    fig.legend(handles, labels, frameon=False, fontsize=9, ncol=len(labels), loc="upper left",
-               bbox_to_anchor=(0.005, 0.965), handletextpad=0.2, columnspacing=1.2)
-    fig.tight_layout(rect=(0, 0, 1, 0.92))
-    fig.savefig(path, dpi=200, facecolor="#fcfcfb")
-    plt.close(fig)
+    fig.legend(handles, labels, ncol=len(labels), loc="lower right", bbox_to_anchor=(1.0, 0.975),
+               handletextpad=0.2, columnspacing=1.2)
+    fig.tight_layout(h_pad=1.4)
+    save(fig, path)
 
 
 def fig_grid(e: pd.DataFrame, path, noun: str, min_flips: int = 3) -> None:
@@ -96,33 +94,30 @@ def fig_grid(e: pd.DataFrame, path, noun: str, min_flips: int = 3) -> None:
         return
     sort_key = "years" if e.years.notna().any() else "essay_id"
     items = e.drop_duplicates("essay_id").sort_values([sort_key, "essay_id"]).essay_id.tolist()
-    fig, axes = plt.subplots(1, len(panels), figsize=(1.55 * len(panels) + 1.2, 6.2), sharey=True, squeeze=False)
-    for ax, (m, d, a) in zip(axes[0], panels):
+    fig, axes = plt.subplots(1, len(panels), figsize=(WIDTH, 4.6), sharey=True, squeeze=False)
+    for ax, letter, (m, d, a) in zip(axes[0], "abcdefgh", panels):
         g = e[(e.model == m) & (e.defence == d) & (e.attack == a)]
         grid = g.pivot(index="essay_id", columns="variant", values="passed").reindex(items)
-        cmap = LinearSegmentedColormap.from_list(m, ["#f1f1ee", COLORS[m]])
+        cmap = LinearSegmentedColormap.from_list(m, [PALE, COLORS[m]])
         ax.imshow(grid.to_numpy(float), cmap=cmap, vmin=0, vmax=1, aspect="auto")
-        ax.set_xticks(range(3), ["0", "1", "2"])
+        ax.set_xticks(range(3), ["W0", "W1", "W2"])
         ax.set_xticks(np.arange(-0.5, 3), minor=True)
         ax.set_yticks(np.arange(-0.5, len(items)), minor=True)
-        ax.grid(which="minor", color="#fcfcfb", lw=2)  # surface gap between cells
-        ax.tick_params(which="minor", length=0)
-        ax.tick_params(colors="#55554f", labelsize=8, length=0)
+        ax.grid(which="minor", color=PAPER, lw=1.5)  # white gaps between cells
+        ax.tick_params(which="both", length=0)
         for s in ax.spines.values():
             s.set_visible(False)
-        ax.set_xlabel("wording", fontsize=8, color="#55554f")
-        ax.set_title(f"{MODELS[m]}\n{a}\n{'no defence' if d == 'none' else 'spotlight'}", fontsize=9, color="#22221f")
+        ax.set_title(f"$\\bf{{({letter})}}$ {MODELS[m]}\n{ATTACK_LABELS[a]}\n"
+                     f"{'no defence' if d == 'none' else 'spotlighting'}", fontsize=8.5, loc="center", color=INK)
     if sort_key == "years":
         yrs = e.drop_duplicates("essay_id").set_index("essay_id").years.reindex(items)
         axes[0, 0].set_yticks(range(len(items)), [f"{y:g} yrs" for y in yrs])
     else:
         axes[0, 0].set_yticks(range(len(items)), [""] * len(items))
-    axes[0, 0].set_ylabel(f"weak {noun} (one row each)", fontsize=9, color="#55554f")
-    fig.suptitle(f"Which weak {noun} were rated ≥ 4 by which wording (dark = every epoch, pale = never)",
-                 fontsize=10, color="#22221f", x=0.01, ha="left")
-    fig.tight_layout(rect=(0, 0, 1, 0.97))
-    fig.savefig(path, dpi=200, facecolor="#fcfcfb")
-    plt.close(fig)
+    axes[0, 0].set_ylabel(f"Weak {noun} (one row each)")
+    fig.supxlabel("Wording", fontsize=9, y=0.02)
+    fig.tight_layout(w_pad=0.6)
+    save(fig, path)
 
 
 def main() -> None:
@@ -145,7 +140,7 @@ def main() -> None:
     pd.set_option("display.width", 160)
     print(table.round(2).to_string(index=False))
 
-    # Are the same items vulnerable across wordings? Count, per item, how many wordings flipped it.
+    # how many wordings flipped each item
     per = e[e.passed > 0].groupby(["model", "defence", "attack"]).essay_id.value_counts()
     print(f"\n{noun.capitalize()} flipped by k of 3 wordings\n",
           per.groupby(level=[0, 1, 2]).value_counts().sort_index().to_string())

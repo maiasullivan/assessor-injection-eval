@@ -1,16 +1,9 @@
-"""Part B confirmation tests, exactly as pre-registered in docs/partB_probe.md §4.
+"""Part B confirmation tests, as pre-registered in docs/partB_probe.md (sections 4 and 9).
 
-    uv run --group whitebox python whitebox/confirm_probe.py extract [confirm|confirm_lm]   # 120 essays x 3 conditions
-    uv run --group whitebox python whitebox/confirm_probe.py analyse [confirm|confirm_lm]
+    uv run --group whitebox python whitebox/confirm_probe.py extract confirm      # or confirm_lm
+    uv run --group whitebox python whitebox/confirm_probe.py analyse confirm
 
-confirm = the first confirmation set (§4); confirm_lm = the length-matched one (§9). Default confirm.
-
-extract: for each confirmation essay, clean / direct / fake_note (no defence, hashed wording),
-one forward pass recording the last-position hidden state at every layer and the digit
-distribution (-> expected score, the "written output"). One .npz per condition in .cache/whitebox/.
-
-analyse: H1-H4 with paired, tier-stratified bootstrap CIs; writes results/whitebox/confirm_*.csv
-and fig6_confirm.png (fig7_confirm_lm.png for the length-matched set).
+Writes results/whitebox/<set>_results.csv, <set>_per_essay.csv and fig6 (fig7 for confirm_lm).
 """
 
 import re
@@ -79,7 +72,7 @@ def extract(name: str) -> None:
         print(f"{attack}: {len(states)} essays", flush=True)
 
 
-# --- surface features (pre-registered list, §4.3) ---
+# surface features, as listed in the pre-registration
 
 @lru_cache(maxsize=1)
 def dictionary() -> frozenset[str]:
@@ -115,8 +108,6 @@ def surface_features(text: str) -> list[float]:
 SURFACE_NAMES = ["log_words", "mean_word_len", "ttr150", "misspelled", "sent_len", "lower_start", "lower_i_per100"]
 
 
-# --- analysis ---
-
 def auroc(weak: np.ndarray, score: np.ndarray) -> float:
     from sklearn.metrics import roc_auc_score
     return roc_auc_score(weak, score)
@@ -149,7 +140,7 @@ def oof_auroc_scores(X: np.ndarray, weak: np.ndarray, rng_seed: int) -> np.ndarr
 
 def analyse(name: str) -> None:
     import matplotlib.pyplot as plt
-    from analyse import style
+    from figstyle import COLORS, INK, PAPER, RULE, WIDTH, save, style
     from assessor_eval.prompts import ASAP
     import json
 
@@ -196,24 +187,23 @@ def analyse(name: str) -> None:
     pd.set_option("display.width", 200)
     print(res.T.round(3).to_string())
 
-    # Figure: AUROC by condition for output, shallow probe, mid probe, surface baseline
-    fig, ax = plt.subplots(figsize=(7.5, 3.8))
-    series = [("auroc_output", "Model's written score", "#1f1f1d"), ("auroc_mid", "Probe, layers 15–17", "#1baf7a"),
-              ("auroc_shallow", "Probe, layer 1", "#2a78d6"), ("auroc_surface_probe_set", "Surface features only", "#8a8a84")]
+    fig, ax = plt.subplots(figsize=(WIDTH, 2.8))
+    series = [("auroc_output", "model's written score", INK), ("auroc_mid", "probe, layers 15–17", COLORS["qwen"]),
+              ("auroc_shallow", "probe, layer 1", COLORS["haiku"]), ("auroc_surface_probe_set", "surface features only", "#a8a8a8")]
     x = np.arange(len(CONDITIONS))
     width = 0.2
     for k, (col, label, color) in enumerate(series):
-        ax.bar(x + (k - 1.5) * width, res[col], width - 0.02, color=color, label=label)
-    ax.axhline(0.5, color="#c9c9c4", lw=1, zorder=0)
-    ax.set_xticks(x, ["clean", "direct", "fake_note"])
-    ax.set_ylim(0.4, 1.0)
-    ax.set_ylabel("AUROC, weak vs strong (60 + 60)")
-    ax.legend(frameon=False, fontsize=8, ncol=2, loc="upper center", bbox_to_anchor=(0.5, 1.18))
+        bars = ax.bar(x + (k - 1.5) * width, res[col], width - 0.03, color=color, label=label, edgecolor=PAPER, lw=0)
+        ax.bar_label(bars, fmt="%.2f", fontsize=7, color=INK, padding=1.5)
+    ax.axhline(0.5, color=RULE, lw=0.6, ls=":", zorder=0)
+    ax.set_xticks(x, ["clean", "direct", "fake note"])
+    ax.tick_params(axis="x", length=0)
+    ax.set_ylim(0.4, 1.05)
+    ax.set_ylabel("AUROC, weak vs strong")
+    ax.legend(ncol=4, loc="lower left", bbox_to_anchor=(0, 1.0), columnspacing=1.0)
     style(ax)
     fig.tight_layout()
-    fig.savefig(OUT / ("fig6_confirm.png" if name == "confirm" else f"fig7_{name}.png"), dpi=200, facecolor="#fcfcfb")
-    plt.close(fig)
-
+    save(fig, OUT / ("fig6_confirm.png" if name == "confirm" else f"fig7_{name}.png"))
 
 if __name__ == "__main__":
     {"extract": extract, "analyse": analyse}[sys.argv[1]](sys.argv[2] if len(sys.argv) > 2 else "confirm")

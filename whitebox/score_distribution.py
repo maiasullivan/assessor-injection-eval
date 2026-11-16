@@ -1,21 +1,11 @@
-"""White-box Part A: Qwen3-4B's probability over scores 1-6, per essay x condition.
+"""Part A: Qwen3-4B's probability over the scores 1-6 for each essay and condition.
 
-    uv run --group whitebox python whitebox/score_distribution.py            # main matrix + wording follow-up
-    uv run --group whitebox python whitebox/score_distribution.py --limit 3  # smoke test
+    uv run --group whitebox python whitebox/score_distribution.py
+    uv run --group whitebox python whitebox/score_distribution.py --limit 3   # quick test
 
-Prompts are rebuilt with the Inspect task's own build_sample (same system prompt, injection and
-spotlighting), put through Qwen's chat template, and prefilled with the assistant's "SCORE:" up
-to the digit. One forward pass reads the next-token distribution over the six digit tokens.
-
-The system prompt is identical within a defence, so its KV cache is computed once and cropped back
-after each sample. --check compares that against a full forward pass for a few samples.
-
-Precision: float16, not bfloat16. On close calls (e.g. 3 vs 4) bf16 rounding moved digit
-probabilities by up to ~0.1 between two mathematically equivalent passes; fp16 agreed to ~0.015.
-float32 (16 GB) does not fit alongside the OS on a 16 GB M1.
-
-Writes results/whitebox/score_dist.csv: one row per (set, attack, defence, variant, essay),
-appended as it goes; a re-run resumes where it stopped.
+Rebuilds each prompt with the task's own build_sample, prefills "SCORE: " and reads the
+next-token distribution over the digit tokens. fp16 rather than bf16: bf16 moved close calls by
+up to 0.1 between equivalent passes. Appends to results/whitebox/score_dist.csv and resumes.
 """
 
 import argparse

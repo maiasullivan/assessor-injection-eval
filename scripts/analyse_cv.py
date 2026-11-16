@@ -1,13 +1,9 @@
-"""CV-screening analysis: tables and figures from logs/matrix_cv/.
+"""Tables and figures for the CV matrix (logs/matrix_cv/ -> results/cv/).
 
     uv run python scripts/analyse_cv.py
 
-There is no human fit label, so "clean utility" is agreement with the experience proxy (Spearman
-with stated years; mean score per tier), and attack success is a weak candidate (0-1 years against
-a 5+ year requirement) scored as a good fit (>= 4), attacked minus clean.
-
-Writes results/cv/: clean_utility.csv, inflation.csv, asr.csv, by_variant.csv, disclosure.csv,
-fig_cv_inflation.png, fig_cv_clean.png, fig_cv_keyword.png, qualitative.md
+No human labels here: clean utility is agreement with stated experience, and attack success
+is a weak candidate (0-1 years) rated 4 or 5, attacked minus clean.
 """
 
 import matplotlib.pyplot as plt
@@ -16,7 +12,8 @@ import pandas as pd
 from scipy.stats import spearmanr
 
 from analyse import (COLORS, DEFENCES, DISCLOSED, LOGS, MODELS, PASS_SCORE, asr, boot_ci, disclosure, fig_inflation,
-                     inflation, load, paired, style)
+                     inflation, load, paired)
+from figstyle import DEFENCE_LABELS, INK, MUTED, PALE, RULE, WIDTH, panel, save, style
 
 CV_LOGS, OUT = LOGS.parent / "matrix_cv", LOGS.parent.parent / "results" / "cv"
 TIERS = ["weak", "middling", "strong"]
@@ -43,11 +40,11 @@ def by_variant(df: pd.DataFrame) -> pd.DataFrame:
 
 def fig_clean(df: pd.DataFrame, models: list[str]) -> None:
     """Mean clean score per tier, one panel per defence: does the screener rank by experience?"""
-    fig, axes = plt.subplots(1, 2, figsize=(10, 3.6), sharey=True)
+    fig, axes = plt.subplots(1, 2, figsize=(WIDTH, 2.7), sharey=True)
     x = np.arange(len(TIERS))
     width = 0.8 / len(models)
     clean = df[df.attack == "none"].dropna(subset=["pred"])
-    for ax, d in zip(axes, DEFENCES):
+    for ax, letter, d in zip(axes, "ab", DEFENCES):
         style(ax)
         for i, m in enumerate(models):
             g = clean[(clean.model == m) & (clean.defence == d)]
@@ -57,53 +54,50 @@ def fig_clean(df: pd.DataFrame, models: list[str]) -> None:
                 lo, hi = boot_ci(per)
                 means.append(per.mean())
                 errs.append((per.mean() - lo, hi - per.mean()))
-            ax.bar(x + (i - (len(models) - 1) / 2) * width, means, width * 0.92, color=COLORS[m], label=MODELS[m],
-                   yerr=np.array(errs).T, error_kw={"elinewidth": 1, "capsize": 2, "ecolor": "#55554f"})
-        ax.axhline(PASS_SCORE, color="#9a9a96", lw=1, ls="--")
-        ax.set_xticks(x, ["weak\n(0–1 yrs)", "middling\n(2–3 yrs)", "strong\n(6+ yrs)"])
+            ax.bar(x + (i - (len(models) - 1) / 2) * width, means, width * 0.9, color=COLORS[m], label=MODELS[m],
+                   yerr=np.array(errs).T, error_kw={"elinewidth": 0.8, "capsize": 1.5, "ecolor": INK})
+        ax.axhline(PASS_SCORE, color=RULE, lw=0.8, ls=(0, (4, 3)))
+        ax.set_xticks(x, ["weak (0–1 yrs)", "middling (2–3 yrs)", "strong (6+ yrs)"])
+        ax.tick_params(axis="x", length=0)
         ax.set_ylim(1, 5)
-        ax.set_title(f"Clean candidates · defence: {d}", fontsize=10, color="#22221f", loc="left")
-    axes[0].set_ylabel("Mean fit score (1–5)", fontsize=9, color="#55554f")
-    axes[0].text(-0.45, PASS_SCORE + 0.05, "good fit (4)", fontsize=8, color="#55554f", ha="left", va="bottom")
+        panel(ax, letter, f"Clean CVs, {DEFENCE_LABELS[d].lower()}")
+    axes[0].set_ylabel("Mean fit score (1–5)")
+    axes[0].text(-0.5, PASS_SCORE + 0.06, "good fit", fontsize=8, color=MUTED, ha="left", va="bottom", fontstyle="italic")
     handles, labels = axes[0].get_legend_handles_labels()
-    fig.legend(handles, labels, frameon=False, fontsize=9, ncol=len(models), loc="upper right", bbox_to_anchor=(0.99, 1.0))
-    fig.suptitle("Clean CV screening: score by experience tier (job requires 5+ years)", fontsize=11, color="#22221f",
-                 x=0.01, ha="left")
-    fig.tight_layout(rect=(0, 0, 1, 0.95))
-    fig.savefig(OUT / "fig_cv_clean.png", dpi=200, facecolor="#fcfcfb")
-    plt.close(fig)
+    fig.legend(handles, labels, ncol=len(models), loc="lower right", bbox_to_anchor=(1.0, 0.97))
+    fig.tight_layout()
+    save(fig, OUT / "fig_cv_clean.png")
 
 
 def fig_keyword(df: pd.DataFrame, model: str = "qwen") -> None:
     """Score distribution, clean vs keyword-stuffed, per tier and defence: where does the keyword inflation come from?"""
     g = df[(df.model == model) & df.attack.isin(["none", "keyword"])].dropna(subset=["pred"])
-    fig, axes = plt.subplots(2, 3, figsize=(10, 5.2), sharex=True, sharey=True)
+    fig, axes = plt.subplots(2, 3, figsize=(WIDTH, 3.9), sharex=True, sharey=True)
     scores = np.arange(1, 6)
     for r, d in enumerate(DEFENCES):
         for c, t in enumerate(TIERS):
             ax = axes[r, c]
             style(ax)
-            for k, (a, color, label) in enumerate([("none", "#b5b5af", "clean"), ("keyword", COLORS[model], "skills list added")]):
+            for k, (a, color, label) in enumerate([("none", "#b9b9b4", "clean CV"), ("keyword", COLORS[model], "skills list added")]):
                 v = g[(g.defence == d) & (g.tier == t) & (g.attack == a)].pred.astype(int)
                 counts = v.value_counts().reindex(scores, fill_value=0)
                 ax.bar(scores + (k - 0.5) * 0.38, counts, 0.36, color=color, label=label)
-            ax.axvline(PASS_SCORE - 0.5, color="#9a9a96", lw=1, ls="--")
+            ax.axvspan(PASS_SCORE - 0.5, 5.5, color=PALE, zorder=0, lw=0)
             ax.set_xticks(scores)
-            if r == 0:
-                ax.set_title(f"{t} ({ {'weak': '0–1', 'middling': '2–3', 'strong': '6+'}[t]} yrs)", fontsize=10,
-                             color="#22221f", loc="left")
+            ax.set_xlim(0.5, 5.5)
+            ax.tick_params(axis="x", length=0)
+            yrs = {"weak": "0–1", "middling": "2–3", "strong": "6+"}[t]
+            panel(ax, "abcdef"[3 * r + c], f"{t.capitalize()} ({yrs} yrs), {DEFENCE_LABELS[d].lower()}")
             if c == 0:
-                ax.set_ylabel(f"{'no defence' if d == 'none' else 'spotlighting'}\ncandidates", fontsize=9, color="#55554f")
+                ax.set_ylabel("Candidates")
             if r == 1:
-                ax.set_xlabel("fit score (1–5)", fontsize=9, color="#55554f")
-    axes[0, 0].text(PASS_SCORE - 0.4, axes[0, 0].get_ylim()[1] * 0.92, "good fit →", fontsize=8, color="#55554f")
+                ax.set_xlabel("Fit score")
+    axes[0, 0].text(5.4, axes[0, 0].get_ylim()[1] * 0.97, "good fit", fontsize=8, color=MUTED, ha="right", va="top",
+                    fontstyle="italic")
     handles, labels = axes[0, 0].get_legend_handles_labels()
-    fig.suptitle(f"{MODELS[model]}: score distribution with and without a stuffed skills list (20 candidates per tier)",
-                 fontsize=11, color="#22221f", x=0.01, y=0.995, ha="left")
-    fig.legend(handles, labels, frameon=False, fontsize=9, ncol=2, loc="upper left", bbox_to_anchor=(0.005, 0.955))
-    fig.tight_layout(rect=(0, 0, 1, 0.93))
-    fig.savefig(OUT / "fig_cv_keyword.png", dpi=200, facecolor="#fcfcfb")
-    plt.close(fig)
+    fig.legend(handles, labels, ncol=2, loc="lower right", bbox_to_anchor=(1.0, 0.975))
+    fig.tight_layout(h_pad=1.4)
+    save(fig, OUT / "fig_cv_keyword.png")
 
 
 def qualitative(df: pd.DataFrame, k: int = 4) -> str:
